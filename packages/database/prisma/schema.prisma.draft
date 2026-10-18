@@ -1,0 +1,622 @@
+// packages/database/prisma/schema.prisma.draft
+// Esqueleto de modelos confirmados via evidência direta de INSERTs do Script_Dados.sql
+// TODO: Atualizar com o DDL completo exportado via mysqldump para confirmar tipos precisos, índices e triggers
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// APOIO
+// ============================================================
+
+model EstadoCivil {
+  id        Int     @id @default(autoincrement())
+  nome      String  @db.VarChar(30)
+  descricao String? @db.VarChar(60)
+
+  pessoasFisicas PessoaFisica[]
+
+  @@map("ESTADO_CIVIL")
+}
+
+model NivelFormacao {
+  id        Int     @id @default(autoincrement())
+  nome      String  @db.VarChar(80)
+  descricao String? @db.VarChar(120)
+
+  pessoasFisicas PessoaFisica[]
+
+  @@map("NIVEL_FORMACAO")
+}
+
+model Uf {
+  id         Int    @id @default(autoincrement())
+  sigla      String @unique @db.Char(2)
+  nome       String @db.VarChar(60)
+  codigoIbge Int    @unique
+
+  municipios Municipio[]
+
+  @@map("UF")
+}
+
+model Municipio {
+  id                    Int     @id @default(autoincrement())
+  idUf                  Int
+  nome                  String  @db.VarChar(80)
+  codigoIbge            Int     @unique
+  codigoReceitaFederal  String? @db.VarChar(10)
+  codigoEstadual        String? @db.VarChar(10)
+
+  uf Uf @relation(fields: [idUf], references: [id])
+
+  @@index([idUf])
+  @@map("MUNICIPIO")
+}
+
+model Banco {
+  id     Int     @id @default(autoincrement())
+  codigo String? @db.VarChar(5)   // nullable: há registros com CODIGO=NULL no script
+  nome   String  @db.VarChar(120)
+  url    String? @db.VarChar(255)
+
+  agencias BancoAgencia[]
+
+  @@map("BANCO")
+}
+
+model BancoAgencia {
+  id      Int    @id @default(autoincrement())
+  idBanco Int
+  numero  Int
+  nome    String @db.VarChar(80)
+
+  banco   Banco         @relation(fields: [idBanco], references: [id])
+  contas  BancoContaCaixa[]
+
+  @@index([idBanco])
+  @@map("BANCO_AGENCIA")
+}
+
+model BancoContaCaixa {
+  id             Int     @id @default(autoincrement())
+  idBancoAgencia Int?    // nullable: caixa interno não tem agência
+  numero         String  @db.VarChar(20)
+  nome           String  @db.VarChar(80)
+  descricao      String? @db.VarChar(200)
+  tipo           String  @db.Char(1) // 'C' = conta bancária, 'X' = caixa interno
+
+  agencia BancoAgencia? @relation(fields: [idBancoAgencia], references: [id])
+
+  @@index([idBancoAgencia])
+  @@map("BANCO_CONTA_CAIXA")
+}
+
+// ============================================================
+// FISCAL
+// ============================================================
+
+model Cfop {
+  id        Int     @id @default(autoincrement())
+  codigo    String  @unique @db.VarChar(4)
+  descricao String  @db.VarChar(200)
+  aplicacao String? @db.Text
+
+  naturezas NaturezaOperacao[]
+  produtos  Produto[]
+
+  @@map("CFOP")
+}
+
+model CstIcms {
+  id        Int    @id @default(autoincrement())
+  codigo    String @unique @db.VarChar(2)
+  descricao String @db.VarChar(120)
+
+  produtos  Produto[]
+  naturezas NaturezaOperacao[]
+
+  @@map("CST_ICMS")
+}
+
+model Csosn {
+  id         Int     @id @default(autoincrement())
+  codigo     String  @unique @db.VarChar(3)
+  descricao  String  @db.VarChar(120)
+  observacao String? @db.Text
+
+  produtos  Produto[]
+  naturezas NaturezaOperacao[]
+
+  @@map("CSOSN")
+}
+
+model CstCofins {
+  id        Int    @id @default(autoincrement())
+  descricao String @db.VarChar(120)
+  codigo    String @unique @db.VarChar(2)
+
+  @@map("CST_COFINS")
+}
+
+model CstPis {
+  id        Int    @id @default(autoincrement())
+  descricao String @db.VarChar(120)
+  codigo    String @unique @db.VarChar(2)
+
+  @@map("CST_PIS")
+}
+
+model CstIpi {
+  id        Int    @id @default(autoincrement())
+  descricao String @db.VarChar(120)
+  codigo    String @unique @db.VarChar(2)
+
+  @@map("CST_IPI")
+}
+
+model Ncm {
+  id        Int    @id @default(autoincrement())
+  codigo    String @unique @db.VarChar(8)
+  descricao String @db.VarChar(200)
+
+  produtos Produto[]
+
+  @@map("NCM")
+}
+
+// TODO: confirmar com DDL — colunas de auditoria e nome real da tabela
+model NaturezaOperacao {
+  id                Int    @id @default(autoincrement())
+  descricao         String @db.VarChar(120)
+  idCfop            Int
+  idCstIcms         Int?
+  idCsosn           Int?
+  tipo              String @db.VarChar(10) // 'SAIDA' | 'ENTRADA'
+  movimentaEstoque  String @db.Char(1)     // 'S' | 'N'
+  geraFinanceiro    String @db.Char(1)
+
+  cfop  Cfop    @relation(fields: [idCfop], references: [id])
+  cst   CstIcms? @relation(fields: [idCstIcms], references: [id])
+  csosn Csosn?  @relation(fields: [idCsosn], references: [id])
+
+  @@map("NATUREZA_OPERACAO")
+}
+
+// TODO: confirmar com DDL
+model SerieFiscal {
+  id            Int     @id @default(autoincrement())
+  idEmpresa     Int
+  serie         String  @db.VarChar(3)
+  modelo        String  @db.VarChar(2) // '55' | '65' | '59'
+  tipoEmissao   String  @db.VarChar(20)
+  ultimoNumero  Int     @default(0)
+  ativo         String  @db.Char(1)
+
+  @@unique([idEmpresa, serie, modelo])
+  @@map("SERIE_FISCAL")
+}
+
+// ============================================================
+// PESSOAS
+// ============================================================
+
+model Pessoa {
+  id               Int     @id @default(autoincrement())
+  nome             String  @db.VarChar(120)
+  tipo             String  @db.Char(1) // 'F' | 'J'
+  email            String? @db.VarChar(120)
+  site             String? @db.VarChar(120)
+  ehCliente        String  @db.Char(1) @default("N")
+  ehFornecedor     String  @db.Char(1) @default("N")
+  ehColaborador    String  @db.Char(1) @default("N")
+  ehTransportadora String  @db.Char(1) @default("N")
+
+  pessoaFisica   PessoaFisica?
+  pessoaJuridica PessoaJuridica?
+  enderecos      PessoaEndereco[]
+  telefones      PessoaTelefone[]
+  cliente        Cliente?
+  fornecedor     Fornecedor?
+  contador       Contador?
+  transportadora Transportadora?
+
+  @@map("PESSOA")
+}
+
+model PessoaFisica {
+  id              Int     @id @default(autoincrement())
+  idPessoa        Int     @unique
+  idEstadoCivil   Int
+  idNivelFormacao Int
+  cpf             String  @unique @db.Char(11)
+  rg              String? @db.VarChar(20)
+  orgaoRg         String? @db.VarChar(20)
+  dataEmissaoRg   DateTime? @db.Date
+  dataNascimento  DateTime @db.Date
+  sexo            String  @db.Char(1)
+
+  pessoa         Pessoa        @relation(fields: [idPessoa], references: [id])
+  estadoCivil    EstadoCivil   @relation(fields: [idEstadoCivil], references: [id])
+  nivelFormacao  NivelFormacao @relation(fields: [idNivelFormacao], references: [id])
+
+  @@map("PESSOA_FISICA")
+}
+
+model PessoaJuridica {
+  id                   Int     @id @default(autoincrement())
+  idPessoa             Int     @unique
+  cnpj                 String  @unique @db.Char(14)
+  nomeFantasia         String  @db.VarChar(120)
+  inscricaoMunicipal   String? @db.VarChar(20)
+  inscricaoEstadual    String? @db.VarChar(20)
+  dataConstituicao     DateTime @db.Date
+  tipoRegime           String? @db.Char(1)
+  crt                  String? @db.Char(1)
+
+  pessoa Pessoa @relation(fields: [idPessoa], references: [id])
+
+  @@map("PESSOA_JURIDICA")
+}
+
+model PessoaEndereco {
+  id                Int     @id @default(autoincrement())
+  idPessoa          Int
+  logradouro        String  @db.VarChar(120)
+  numero            String  @db.VarChar(10)
+  complemento       String? @db.VarChar(60)
+  bairro            String  @db.VarChar(60)
+  cidade            String  @db.VarChar(60)
+  cep               String  @db.Char(8)
+  municipioIbge     String  @db.Char(7)
+  uf                String  @db.Char(2)
+  principal         String? @db.Char(1)
+  entrega           String? @db.Char(1)
+  cobranca          String? @db.Char(1)
+  correspondencia   String? @db.Char(1)
+
+  pessoa Pessoa @relation(fields: [idPessoa], references: [id])
+
+  @@index([idPessoa])
+  @@map("PESSOA_ENDERECO")
+}
+
+model PessoaTelefone {
+  id       Int    @id @default(autoincrement())
+  idPessoa Int
+  tipo     String @db.Char(1)  // '0' | '1' | '2'
+  numero   String @db.VarChar(11)
+
+  pessoa Pessoa @relation(fields: [idPessoa], references: [id])
+
+  @@index([idPessoa])
+  @@map("PESSOA_TELEFONE")
+}
+
+model Cliente {
+  id       Int @id @default(autoincrement())
+  idPessoa Int @unique
+
+  pessoa Pessoa @relation(fields: [idPessoa], references: [id])
+
+  @@map("CLIENTE")
+}
+
+model Fornecedor {
+  id       Int @id @default(autoincrement())
+  idPessoa Int @unique
+
+  pessoa Pessoa @relation(fields: [idPessoa], references: [id])
+
+  @@map("FORNECEDOR")
+}
+
+model Contador {
+  id           Int    @id @default(autoincrement())
+  idPessoa     Int    @unique
+  crcInscricao String @db.VarChar(20)
+
+  pessoa Pessoa @relation(fields: [idPessoa], references: [id])
+
+  @@map("CONTADOR")
+}
+
+model Transportadora {
+  id       Int     @id @default(autoincrement())
+  idPessoa Int     @unique
+  rntrc    String? @db.VarChar(20)
+  tipo     String? @db.VarChar(3) // 'CIF' | 'FOB' | 'TAC'
+
+  pessoa   Pessoa @relation(fields: [idPessoa], references: [id])
+  veiculos TransportadoraVeiculo[]
+  motoristas TransportadoraMotorista[]
+
+  @@map("TRANSPORTADORA")
+}
+
+model TransportadoraVeiculo {
+  id                Int     @id @default(autoincrement())
+  idTransportadora  Int
+  placa             String  @db.VarChar(7)
+  ufPlaca           String  @db.Char(2)
+  renavam           String? @db.VarChar(11)
+  tipoVeiculo       String? @db.VarChar(20)
+  marca             String? @db.VarChar(40)
+  modelo            String? @db.VarChar(40)
+  ano               Int?
+  capacidadeKg      Int?
+
+  transportadora Transportadora @relation(fields: [idTransportadora], references: [id])
+
+  @@index([idTransportadora])
+  @@map("TRANSPORTADORA_VEICULO")
+}
+
+model TransportadoraMotorista {
+  id                Int      @id @default(autoincrement())
+  idTransportadora  Int
+  idPessoa          Int
+  cnh               String   @db.VarChar(11)
+  categoriaCnh      String   @db.Char(1)
+  validadeCnh       DateTime @db.Date
+
+  transportadora Transportadora @relation(fields: [idTransportadora], references: [id])
+  pessoa         Pessoa         @relation(fields: [idPessoa], references: [id])
+
+  @@index([idTransportadora])
+  @@map("TRANSPORTADORA_MOTORISTA")
+}
+
+// ============================================================
+// EMPRESA / RH / ACESSO
+// ============================================================
+
+model Empresa {
+  id                       Int     @id @default(autoincrement())
+  razaoSocial              String  @db.VarChar(120)
+  nomeFantasia             String? @db.VarChar(120)
+  cnpj                     String  @unique @db.Char(14)
+  inscricaoEstadual        String? @db.VarChar(20)
+  inscricaoMunicipal       String? @db.VarChar(20)
+  inscricaoJuntaComercial  String? @db.VarChar(20)
+  dataInscJuntaComercial   DateTime? @db.Date
+  tipo                     String? @db.VarChar(10)
+  email                    String? @db.VarChar(120)
+  codigoIbgeCidade         String  @db.Char(7)
+  codigoIbgeUf             String  @db.Char(2)
+
+  enderecos EmpresaEndereco[]
+  telefones EmpresaTelefone[]
+
+  @@map("EMPRESA")
+}
+
+model EmpresaEndereco {
+  id                Int     @id @default(autoincrement())
+  idEmpresa         Int
+  logradouro        String  @db.VarChar(120)
+  numero            String  @db.VarChar(10)
+  complemento       String? @db.VarChar(60)
+  bairro            String  @db.VarChar(60)
+  cidade            String  @db.VarChar(60)
+  cep               String  @db.Char(8)
+  municipioIbge     String  @db.Char(7)
+  uf                String  @db.Char(2)
+  principal         String? @db.Char(1)
+  entrega           String? @db.Char(1)
+  cobranca          String? @db.Char(1)
+  correspondencia   String? @db.Char(1)
+
+  empresa Empresa @relation(fields: [idEmpresa], references: [id])
+
+  @@index([idEmpresa])
+  @@map("EMPRESA_ENDERECO")
+}
+
+model EmpresaTelefone {
+  id        Int    @id @default(autoincrement())
+  idEmpresa Int
+  tipo      String @db.Char(1)
+  numero    String @db.VarChar(11)
+
+  empresa Empresa @relation(fields: [idEmpresa], references: [id])
+
+  @@index([idEmpresa])
+  @@map("EMPRESA_TELEFONE")
+}
+
+model Cargo {
+  id        Int     @id @default(autoincrement())
+  nome      String  @db.VarChar(80)
+  descricao String? @db.VarChar(200)
+  salario   Decimal? @db.Decimal(12, 2)
+  cbo1994   String? @db.VarChar(10)
+  cbo2002   String? @db.VarChar(10)
+
+  colaboradores Colaborador[]
+
+  @@map("CARGO")
+}
+
+model Setor {
+  id        Int     @id @default(autoincrement())
+  nome      String  @db.VarChar(80)
+  descricao String? @db.VarChar(200)
+
+  colaboradores Colaborador[]
+
+  @@map("SETOR")
+}
+
+model Papel {
+  id        Int     @id @default(autoincrement())
+  nome      String  @db.VarChar(40)
+  descricao String? @db.VarChar(200)
+
+  usuarios Usuario[]
+
+  @@map("PAPEL")
+}
+
+model Colaborador {
+  id       Int @id @default(autoincrement())
+  idPessoa Int @unique
+  idCargo  Int
+  idSetor  Int
+
+  cargo  Cargo @relation(fields: [idCargo], references: [id])
+  setor  Setor @relation(fields: [idSetor], references: [id])
+  pessoa Pessoa @relation(fields: [idPessoa], references: [id])
+  usuario Usuario?
+
+  @@map("COLABORADOR")
+}
+
+model Usuario {
+  id              Int      @id @default(autoincrement())
+  idColaborador   Int      @unique
+  idPapel         Int
+  login           String   @unique @db.VarChar(40)
+  senha           String   @db.VarChar(60) // bcrypt
+  dataCadastro    DateTime @default(now())
+  administrador   String   @db.Char(1) @default("N")
+
+  colaborador Colaborador @relation(fields: [idColaborador], references: [id])
+  papel       Papel       @relation(fields: [idPapel], references: [id])
+
+  @@map("USUARIO")
+}
+
+// ============================================================
+// ESTOQUE / PRODUTOS
+// ============================================================
+
+model GrupoProduto {
+  id     Int     @id @default(autoincrement())
+  nome   String  @db.VarChar(60)
+  descricao String? @db.VarChar(200)
+
+  subgrupos SubgrupoProduto[]
+  produtos  Produto[]
+
+  @@map("GRUPO_PRODUTO")
+}
+
+model SubgrupoProduto {
+  id             Int    @id @default(autoincrement())
+  idGrupoProduto Int
+  nome           String @db.VarChar(60)
+  descricao      String? @db.VarChar(200)
+
+  grupo    GrupoProduto @relation(fields: [idGrupoProduto], references: [id])
+  produtos Produto[]
+
+  @@map("SUBGRUPO_PRODUTO")
+}
+
+model Marca {
+  id   Int    @id @default(autoincrement())
+  nome String @db.VarChar(60)
+
+  produtos Produto[]
+
+  @@map("MARCA")
+}
+
+model UnidadeMedida {
+  id             Int    @id @default(autoincrement())
+  sigla          String @unique @db.VarChar(6)
+  descricao      String @db.VarChar(60)
+  fatorConversao Decimal @default(1) @db.Decimal(12, 4)
+
+  produtos Produto[]
+
+  @@map("UNIDADE_MEDIDA")
+}
+
+model Almoxarifado {
+  id         Int     @id @default(autoincrement())
+  idEmpresa  Int
+  nome       String  @db.VarChar(80)
+  descricao  String? @db.VarChar(200)
+  padrao     String  @db.Char(1) @default("N")
+
+  estoques ProdutoEstoque[]
+
+  @@map("ALMOXARIFADO")
+}
+
+model Produto {
+  id                   Int     @id @default(autoincrement())
+  idEmpresa            Int
+  idGrupoProduto       Int
+  idSubgrupoProduto    Int?
+  idMarca              Int?
+  idUnidadeMedida      Int
+  idNcm                Int
+  idCfop               Int
+  idCstIcms            Int?
+  idCsosn              Int?
+  codigoInterno        String  @unique @db.VarChar(30)
+  descricao            String  @db.VarChar(120)
+  descricaoCurta       String? @db.VarChar(60)
+  precoCusto           Decimal @default(0) @db.Decimal(12, 4)
+  precoVenda           Decimal @default(0) @db.Decimal(12, 2)
+  estoqueMinimo        Int     @default(0)
+  estoqueMaximo        Int     @default(0)
+  ativo                String  @db.Char(1) @default("S")
+  pesoLiquido          Decimal? @db.Decimal(12, 3)
+  pesoBruto            Decimal? @db.Decimal(12, 3)
+  controlarEstoque     String  @db.Char(1) @default("S")
+  permiteFracionamento String  @db.Char(1) @default("N")
+  cstPis               String? @db.VarChar(2)
+  cstCofins            String? @db.VarChar(2)
+  cstIpi               String? @db.VarChar(2)
+
+  grupo           GrupoProduto     @relation(fields: [idGrupoProduto], references: [id])
+  subgrupo        SubgrupoProduto? @relation(fields: [idSubgrupoProduto], references: [id])
+  marca           Marca?           @relation(fields: [idMarca], references: [id])
+  unidadeMedida   UnidadeMedida    @relation(fields: [idUnidadeMedida], references: [id])
+  ncm             Ncm              @relation(fields: [idNcm], references: [id])
+  cfop            Cfop             @relation(fields: [idCfop], references: [id])
+  cstIcms         CstIcms?         @relation(fields: [idCstIcms], references: [id])
+  csosn           Csosn?           @relation(fields: [idCsosn], references: [id])
+  codigosBarras   ProdutoCodigoBarras[]
+  estoques        ProdutoEstoque[]
+
+  @@index([idEmpresa])
+  @@map("PRODUTO")
+}
+
+model ProdutoCodigoBarras {
+  id         Int    @id @default(autoincrement())
+  idProduto  Int
+  codigo     String @unique @db.VarChar(20)
+  tipo       String @db.VarChar(10) // 'EAN13' | 'INTERNO'
+  principal  String @db.Char(1) @default("N")
+
+  produto Produto @relation(fields: [idProduto], references: [id])
+
+  @@index([idProduto])
+  @@map("PRODUTO_CODIGO_BARRAS")
+}
+
+// TODO: confirmar com DDL — o INSERT recebido foi truncado no meio
+model ProdutoEstoque {
+  id             Int     @id @default(autoincrement())
+  idProduto      Int
+  idAlmoxarifado Int
+  quantidade     Decimal @default(0) @db.Decimal(12, 3)
+
+  produto      Produto      @relation(fields: [idProduto], references: [id])
+  almoxarifado Almoxarifado @relation(fields: [idAlmoxarifado], references: [id])
+
+  @@unique([idProduto, idAlmoxarifado])
+  @@map("PRODUTO_ESTOQUE")
+}

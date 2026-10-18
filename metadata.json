@@ -1,0 +1,6 @@
+{
+  "name": "ERP & PDV Fiscal Brasil",
+  "description": "Sistema completo de Gestão Empresarial (ERP) e Frente de Caixa (PDV) com emissão fiscal (NFC-e / NF-e), regras tributárias brasileiras, controle de estoque transacional e suporte offline-first.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
